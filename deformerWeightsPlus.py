@@ -34,12 +34,21 @@ def getMayaWindow():
     if ptr is not None:
         return shiboken.wrapInstance(long(ptr), QtGui.QWidget)
 
+def isMesh(node):
+    rels = cmds.listRelatives(node, children=True, s=True)
+    if rels:
+        for shp in rels:
+            if cmds.nodeType(shp)=='mesh':
+                return True
+    return False
+
 def removeUnusedInfluences(mesh):
-    skin = findRelatedSkinCluster(mesh)
-    print skin, mesh
-    for inf in cmds.skinCluster(skin, inf=1, q=1):
-        if inf not in cmds.skinCluster(skin, weightedInfluence=1, q=1):
-            cmds.skinCluster(skin, e=1, ri=inf)
+    if isMesh(mesh):
+        skin = findRelatedSkinCluster(mesh)
+        print skin, mesh
+        for inf in cmds.skinCluster(skin, inf=1, q=1):
+            if inf not in cmds.skinCluster(skin, weightedInfluence=1, q=1):
+                cmds.skinCluster(skin, e=1, ri=inf)
 
 def findRelatedSkinCluster(node):
     skinClusters = cmds.ls(type='skinCluster')
@@ -122,7 +131,7 @@ class DeformerWeightsPlus(QtGui.QDialog):
         self.outputWin.setText(self.output)
         
     def exportFn(self):
-        meshSel = cmds.ls(sl=1, dag=True, type='mesh')
+        meshSel = [m for m in cmds.ls(sl=1) if isMesh(m)]
         if meshSel:
             sdw = SkinDeformerWeights()
             self.output += sdw.saveWeightInfo(fpath=self.pathLINE.text(), meshes=meshSel) + '\n'
@@ -132,7 +141,7 @@ class DeformerWeightsPlus(QtGui.QDialog):
     
     def importFn(self):
         t1 = time.time()
-        meshes = cmds.ls(sl=1, dag=True, type='mesh')
+        meshes = [m for m in cmds.ls(sl=1) if isMesh(m)]
         if meshes:
             for mesh in meshes:
                 fpath = self.pathLINE.text() + mesh + '.skinWeights'
@@ -244,16 +253,18 @@ class SkinDeformerWeights(object):
         #get skin clusters
         meshDict = {}
         for mesh in meshes:
-            #remove unused influences
-            removeUnusedInfluences(mesh)
-
-            sc = findRelatedSkinCluster(mesh)
-            #not using shape atm, mesh instead
-            msh =  cmds.listRelatives(mesh, shapes=1)
-            if sc != '':
-                meshDict[sc] = mesh
-            else:
-                cmds.warning('>>>saveWeightInfo: ' + mesh + ' is not connected to a skinCluster!')
+            if isMesh(mesh):
+                sc = findRelatedSkinCluster(mesh)
+                
+                if sc:
+                    #remove unused influences
+                    removeUnusedInfluences(mesh)
+        
+                    #not using shape atm, mesh instead
+                    msh =  cmds.listRelatives(mesh, shapes=1)
+                    meshDict[sc] = mesh
+                else:
+                    cmds.warning('>>>saveWeightInfo: ' + mesh + ' is not connected to a skinCluster!')
         fname = fpath.split('\\')[-1]
         dir = fpath.replace(fname,'')
 
